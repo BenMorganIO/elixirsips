@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 require 'rubygems'
 require 'bundler/setup'
 Bundler.require(:default)
@@ -20,33 +22,33 @@ end
 
 def authenticate(page)
   page.form_with(name: nil) do |form|
-    form.username = get_username
-    form.password = get_password
-    puts ''
+    form.username = ENV['ELIXIRSIPS_DPDCART_USERNAME'] || get_username
+    form.password = ENV['ELIXIRSIPS_DPDCART_PASSWORD'] || get_password
   end.submit
 end
 
-def download_video(agent, link)
+def download_file(agent, link)
   post = agent.get BASE_URI + link.uri.to_s
-  video_link = post.links.find { |l| l.text.end_with? '.mp4' }
-  video_name = video_link.text.gsub('_', ' ')
+  post.search('//*[@id="blog-container"]/div/ul/li/a').each do |link|
+    file_link, file_name = link['href'], link.text.strip
+    if File.extname(file_name) == '.mkv'
+      puts "Skipping #{file_name}..."
+      next
+    elsif File.exists? "./videos/#{file_name}"
+      puts "Already Downloaded #{file_name}"
+      next
+    end
 
-  if File.exists? "./videos/#{video_name}"
-    puts "Already Downloaded #{video_name}"
-    return
+    puts "Downloading #{file_name}..."
+    agent.get(BASE_URI + file_link).save("./videos/#{file_name}")
   end
-
-  puts "Downloading #{video_name.sub(/.mp4\z/, '')}..."
-  agent.get(BASE_URI + video_link.uri.to_s).save("./videos/#{video_name}")
 end
 
 agent = Mechanize.new
 page = agent.get(BASE_URI + '/subscriber/content')
 
 if content = authenticate(page)
-  content.links.reverse.each do |link|
-    download_video agent, link if link.text =~ /file attachment/i
-  end
+  content.links.each { |link| download_file agent, link if link.text =~ /file attachment/i }
 else
   puts 'Unable to authenticate.'
 end
